@@ -1,0 +1,15 @@
+body {
+	background:#0c0c0c;
+	color:#dadada;
+	font-family: Verdana, 'Lucida Sans Unicode', sans-serif;
+}
+
+.headline {
+	color:#DE5A51;
+	font-weight: bolder;
+}
+
+a {
+	color: #009dff;
+	text-decoration: none;
+}
