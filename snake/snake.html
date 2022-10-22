@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="snake_styles.css">
+    <title>Snake</title>
+</head>
+<body onLoad="startUp()">
+    <div id="score"><span id="scoreText">Score:&#32 1</span></div>
+
+    <canvas id="renderer" width="720" height="720">
+    </canvas>
+
+    <input id="startGameBtn" type="button" value="Start Snake" onClick="startGame()" />
+    <input id="mobileMovementHelpBtn" type="button" value="Toggle movement help" onClick="mobileMovementHelp()" />
+    <input id="audioBtn" type="button" value="Audio is OFF" onClick="toggleAudio()" />
+
+    <script>
+        /*
+            - Canvas is on the left top border (0,0). On the website it does not look like its (0,0), but
+              that is, because the html-body has by default a padding of 8px.
+            - rgba(0..255, 0..255, 0..255, 0..1)
+        */
+        const DIRECTION = {
+            UP: "UP",
+            DOWN: "DOWN",
+            LEFT: "LEFT",
+            RIGHT: "RIGHT"
+        };
+
+        const STATE = {
+            GAME: "GAME",
+            GAMEOVER: "GAMEOVER"
+        }
+
+        class vec2d {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        let renderer = document.getElementById("renderer");
+        let ctx = renderer.getContext("2d");
+        let state = STATE.GAME;
+        let grid = {
+            cellCount: new vec2d(20, 20),
+            cellSize: new vec2d()
+        }
+        grid.cellSize =  new vec2d(renderer.width / grid.cellCount.x, renderer.height / grid.cellCount.y);
+        let snake = {
+            direction: DIRECTION.RIGHT,
+            cells: [
+                new vec2d(1, 3)
+            ]
+        }
+        let food = {
+            pos: new vec2d()
+        };
+        let isMobile = window.orientation > -1; // Desktop Browser do not support this feature, thats how it works.
+        let isMobileMovementHelpEnabled = false;
+        if (isMobile) {
+            document.getElementById("mobileMovementHelpBtn").style.display = "block";
+            isMobileMovementHelpEnabled = true;
+        }
+        let isAudioEnabled = false; // Can not play audio without user interaction otherwise I get an error.
+        placeFood();
+
+        let audioBtn = document.getElementById("audioBtn");
+        audioBtn.onmouseover = function(e) {
+            this.style.backgroundColor = (isAudioEnabled? "rgb(64, 156, 64)" : "rgb(174, 80, 80)"); ;
+        }
+        audioBtn.onmouseout = function(e) {
+            this.style.backgroundColor = (isAudioEnabled? "green" : "rgb(172, 35, 35)");
+        }
+        let music = new Audio("8bit-music-for-game-68698.mp3");
+        music.volume = 0.04;
+        music.loop = true;
+        let score = 1;
+        draw();
+        setInterval(gameLoop, 200); // call gameLoop every 100ms
+        document.addEventListener("keydown", onKeyDown);
+        document.addEventListener("touchstart", onTouch);
+
+        function draw() {
+            if (true) {
+                // Background:
+                ctx.fillStyle = "rgba(30, 30, 30, 1)";
+                ctx.fillRect(0, 0, renderer.width, renderer.height);
+                
+                // Snake:
+                for (const [i, cell] of snake.cells.entries()) { // or: snake.foreach(cell => grid_draw(...))
+                    if (i == 0) {
+                        ctx.fillStyle = "rgba(200, 200, 200, 1)";
+                    }
+                    else {
+                        ctx.fillStyle = "white";
+                    }
+                    grid_draw(cell.x, cell.y);
+                }
+
+                // Food:
+                ctx.fillStyle = "lightgreen";
+                grid_draw(food.pos.x, food.pos.y);
+
+                // Mobile movement help:
+                if (isMobileMovementHelpEnabled) {
+                    if (snake.direction == DIRECTION.LEFT || snake.direction == DIRECTION.RIGHT) {
+                        // snake moves horizontally
+                        ctx.fillStyle = "rgba(200, 200, 200, 0.2)";
+                        ctx.fillRect(0, 0, renderer.width, (renderer.height / 2) - 1);
+                        ctx.fillRect(0, (renderer.height / 2) + 1, renderer.width, (renderer.height / 2) - 1);
+                    }
+                    else if (snake.direction == DIRECTION.UP || snake.direction == DIRECTION.DOWN) {
+                        // snake moves vertically
+                        ctx.fillStyle = "rgba(200, 200, 200, 0.2)";
+                        ctx.fillRect(0, 0, (renderer.width / 2) - 1, renderer.height);
+                        ctx.fillRect((renderer.width / 2) + 1, 0, (renderer.width / 2) - 1, renderer.height);
+                    }
+                }
+            }
+            if (state == STATE.GAMEOVER) {
+                ctx.fillStyle = "rgba(209, 49, 49, 0.75)";
+                ctx.fillRect(0, 0, renderer.width, renderer.height);
+
+                ctx.font = "60px Arial";
+                ctx.fillStyle = "white";
+                let text = "Game Over";
+                let textLocalHeight = ctx.measureText(text).actualBoundingBoxAscent + ctx.measureText(text).actualBoundingBoxDescent;
+                let textScreenCenter = new vec2d(
+                    renderer.width / 2 - ctx.measureText(text).width / 2, 
+                    renderer.height / 2 - textLocalHeight / 2
+                );
+                ctx.fillText(text, 
+                    textScreenCenter.x,
+                    textScreenCenter.y - 50);
+            }
+
+            requestAnimationFrame(draw); // calls 'draw' automatically
+        }
+
+        function grid_draw(x, y) {
+            //console.assert(x <= grid.cellCount.x && x >= 0 && y <= grid.cellCount.y && y >= 0);
+            ctx.fillRect(x * grid.cellSize.x, y * grid.cellSize.y, grid.cellSize.x-1, grid.cellSize.y-1);
+        }
+
+        function onKeyDown(e) {
+            switch(e.keyCode) {
+                case 37:
+                    snake.direction = DIRECTION.LEFT;
+                break;
+                case 38:
+                    snake.direction = DIRECTION.UP;
+                break;
+                case 39:
+                    snake.direction = DIRECTION.RIGHT;
+                break;
+                case 40:
+                    snake.direction = DIRECTION.DOWN;
+                break;
+            }
+        }
+
+        function onTouch(e) {
+            /*
+                Positions:
+                - window.innerWidth and window.innerHeight is the width and height of the entire webpage.
+                - document.getElementById("canvas").width / height is the width and height of the canvas.
+                - e.changedTouches[0].pageX / Y is the position of the touch in the entire webpage.
+
+                I draw my canvas at (0,0), so I can easily use pageX / Y inside renderer.width/height.
+            */
+            e.preventDefault(); // keep browser from processing event further
+
+            const window_width = window.innerWidth;
+            const window_height = window.innerHeight;
+            const touch = e.changedTouches[0]; // list of the touch points that became active with the current event.
+            const gameCenter = new vec2d(renderer.width / 2, renderer.height / 2);
+
+            if (touch.pageX <= renderer.width && touch.pageY <= renderer.height) {
+                // Canvas position is by (0,0) on html page.
+                //alert("touch.pageY: " + touch.pageY + "; renderer.height: " + renderer.height);
+
+                if (snake.direction == DIRECTION.LEFT || snake.direction == DIRECTION.RIGHT) {
+                    // snake moves horizontally, so user can only press up or down
+                    if (touch.pageY < renderer.height/2) {
+                        snake.direction = DIRECTION.UP;
+                    }
+                    else if (touch.pageY > renderer.height/2) {
+                        snake.direction = DIRECTION.DOWN;
+                    }
+                }
+                else if (snake.direction == DIRECTION.UP || snake.direction == DIRECTION.DOWN) {
+                    // snake moves vertically, so user can press only left or right
+                    if (touch.pageX < renderer.width/2) {
+                        snake.direction = DIRECTION.LEFT;
+                    }
+                    else if (touch.pageX > renderer.width/2) {
+                        snake.direction = DIRECTION.RIGHT;
+                    }
+                }
+            }
+        }
+
+        function gameLoop()
+        {
+            if (state == STATE.GAME) {
+                snake_move();
+
+                if (snake.cells[0].x == food.pos.x && snake.cells[0].y == food.pos.y) {
+                    placeFood();
+                    if (isAudioEnabled) {
+                        let audio = new Audio("eat_fruit.wav");
+                        audio.volume = 0.1;
+                        audio.loop = false;
+                        audio.play();
+                    }
+                    ++score;
+                    document.getElementById("scoreText").innerHTML = "Score: " + score;
+                    // Add cell:
+                    snake.cells.push(new vec2d(-1, -1)); // push back
+                }
+
+                gameOver();
+            }
+            else if (state == STATE.GAMEOVER) {
+                // do nothing..
+            }
+        }
+
+        function snake_move() {
+            /*
+                'arr.splice()':
+                arr.splice(index, deleteCount, [item0, ...]): Is deleteCount 0, then it inserts the element at
+                'index'. Is deleteCount 1, then it replaces the element at 'index'. 'splice' changes
+                the array and returns an array of the deleted elements (can also return an empty or
+                an array of one element). Alternatively, you can just erase elements with '.splice(index, deleteCount)'.
+                Index -1 calculates the index from the back of the array (in reverse order).
+                'arr.unshift(item0, ..)':
+                Adds one or more items to the front of an array and returns the length of the array.
+                'arr.filter(item => ...)':
+                Returns an array containing all elements which pass the filter. Alternatively, you can
+                ask for more parameters: 'arr.filter(item, index, array => ...)'
+
+                Snake:
+                New elements are pushed to the back.
+                - save cell0, because if array has only one element and one is erased we can not index field 0.
+                - it is a good idea to use cell0 instead of '+=snake_length', because if snake has eaten, then
+                  the new elements values are equal to the first element and not the last by default, which results 
+                  in more if-cases, so this is simpler.  
+                History:
+                0 1 2 3   0 1 2 3
+                -------   -------
+                A B C D ^ D A B C
+                Its always the same pattern:
+                1) Erase last cell
+                2) Create new cell with position one grid further than current cell 0
+                3) Push new cell to the front.
+            */
+            let cell0 = snake.cells[0]; // back this up, because if array has only one item, then after deletion the array is empty and I would require if-statements.
+            snake.cells.splice(-1, 1)[0]; // erase last snake cell.
+            
+            let cell = new vec2d();
+            switch(snake.direction) {
+                case DIRECTION.LEFT: {
+                    cell.x = cell0.x - 1;
+                    cell.y = cell0.y; // for direction change from up/down to left
+                } break;
+                case DIRECTION.UP: {
+                    cell.y = cell0.y - 1;
+                    cell.x = cell0.x;
+                } break;
+                case DIRECTION.RIGHT: {
+                    cell.x = cell0.x + 1;
+                    cell.y = cell0.y;
+                } break;
+                case DIRECTION.DOWN: {
+                    cell.y = cell0.y + 1;
+                    cell.x = cell0.x;
+                } break;
+            }
+
+            snake.cells.unshift(cell);
+        }
+
+        function placeFood() {
+            /* 
+                Math.random() generates a number between 0 and 1.
+                Math.floor() rounds a number. 
+            */
+            food.pos = new vec2d(
+                Math.floor(Math.random() * grid.cellCount.x),
+                Math.floor(Math.random() * grid.cellCount.y)
+            );
+        }
+
+        function gameOver() {
+            let isGameOver = false;
+            let cell0 = snake.cells[0];
+            let otherCells = snake.cells.slice(1);
+            let foundDuplicateCell = otherCells.find(cell => cell.x == cell0.x && cell.y == cell0.y);
+
+            if (snake.cells[0].x < 0 || snake.cells[0].x > grid.cellCount.x || 
+                snake.cells[0].y < 0 || snake.cells[0].y > grid.cellCount.y ||
+                foundDuplicateCell) {
+                isGameOver = true;
+            }
+
+            if (isGameOver) {
+                document.getElementById("startGameBtn").style.display = "block";
+                if (isAudioEnabled) {
+                    let audio = new Audio("gameOver.mp3");
+                    audio.volume = 0.1;
+                    audio.loop = false;
+                    audio.play();
+                }
+                state = STATE.GAMEOVER;
+            }
+        }
+
+        function startGame() {
+            snake.direction = DIRECTION.RIGHT;
+            snake.cells = [ new vec2d(1, 3) ];
+            state = STATE.GAME;
+            score = 1;
+            document.getElementById("scoreText").innerHTML = "Score: 1";
+            placeFood();
+            document.getElementById("startGameBtn").style.display = "none";
+            if (isAudioEnabled) {
+                let audio = new Audio("startGame.mp3");
+                audio.volume = 0.1;
+                audio.loop = false;
+                audio.play();
+            }
+        }
+
+        function mobileMovementHelp() {
+            isMobileMovementHelpEnabled = !isMobileMovementHelpEnabled;
+        }
+
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            let audioBtn = document.getElementById("audioBtn");
+            audioBtn.value = "Audio is " + (isAudioEnabled? "ON" : "OFF"); // or toggle audio
+            audioBtn.style.backgroundColor = (isAudioEnabled? "green" : "rgb(172, 35, 35)");
+
+            if (isAudioEnabled) {
+                music.play();
+            }
+            else {
+                if (!music.paused) {
+                    music.pause();
+                    music.currentTime = 0;
+                }
+            }
+        }
+
+        function startUp() {
+            
+        }
+
+    </script>
+</body>
+</html>
